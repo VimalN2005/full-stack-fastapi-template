@@ -9,7 +9,7 @@ from app.api.deps import get_db
 from app.core.config import settings
 from app.core.db import engine, init_db
 from app.main import app
-from app.models import Document, DocumentChunk, Item, User
+from app.models import Document, DocumentChunk, Item, TokenUsage, User
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import get_superuser_token_headers
 
@@ -50,6 +50,7 @@ def db() -> Generator[Session]:
     with Session(test_engine) as session:
         init_db(session)
         yield session
+        session.execute(delete(TokenUsage))
         session.execute(delete(DocumentChunk))
         session.execute(delete(Document))
         session.execute(delete(Item))

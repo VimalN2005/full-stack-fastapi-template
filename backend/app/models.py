@@ -17,6 +17,7 @@ class UserBase(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
+    monthly_token_limit: int = Field(default=50000)
 
 
 # Properties to receive via API on creation
@@ -37,6 +38,7 @@ class UserUpdate(SQLModel):
     is_superuser: bool | None = None
     full_name: str | None = Field(default=None, max_length=255)
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    monthly_token_limit: int | None = None
 
 
 class UserUpdateMe(SQLModel):
@@ -60,6 +62,9 @@ class User(UserBase, table=True):
     items: list[Item] = Relationship(back_populates="owner", cascade_delete=True)
     documents: list[Document] = Relationship(
         back_populates="owner", cascade_delete=True
+    )
+    token_usages: list[TokenUsage] = Relationship(
+        back_populates="user", cascade_delete=True
     )
 
 
@@ -227,3 +232,53 @@ class RAGQueryResponse(SQLModel):
     query: str
     answer: str
     sources: list[RAGChunkMatch]
+
+
+# ==========================================
+# AI Token Metering & Quota Models
+# ==========================================
+
+
+class TokenUsageBase(SQLModel):
+    model_name: str = Field(max_length=100)
+    prompt_tokens: int = Field(default=0)
+    completion_tokens: int = Field(default=0)
+    total_tokens: int = Field(default=0)
+    estimated_cost_usd: float = Field(default=0.0)
+
+
+class TokenUsage(TokenUsageBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+    )
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+        index=True,
+    )
+    user: User | None = Relationship(back_populates="token_usages")
+
+
+class TokenUsagePublic(TokenUsageBase):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    created_at: datetime | None = None
+
+
+class TokenUsagesPublic(SQLModel):
+    data: list[TokenUsagePublic]
+    count: int
+
+
+class AIUsageStatsResponse(SQLModel):
+    total_tokens_month: int
+    monthly_limit: int
+    remaining_tokens: int
+    estimated_cost_usd: float
+    usage_percentage: float
+    is_unlimited: bool
+
+
+class UpdateQuotaRequest(SQLModel):
+    monthly_token_limit: int = Field(ge=0)

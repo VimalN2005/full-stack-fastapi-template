@@ -139,12 +139,22 @@ This backend includes native support for Retrieval-Augmented Generation (RAG) us
 * `EmbeddingService` (`app/services/embeddings.py`): Generates embeddings via OpenAI or offline fallback.
 * `RAGService` (`app/services/rag.py`): Chunking, ingestion, and hybrid search ranking.
 * `StreamingService` (`app/services/streaming.py`): Abort-aware SSE token streaming generator.
+* `TokenMeteringService` (`app/services/token_metering.py`): In-database token consumption tracking, cost estimation ($/1M tokens), and quota enforcement.
 * `RAG Routes` (`app/api/routes/rag.py`): Ingestion, document CRUD, hybrid search, question answering, and real-time SSE streaming.
+* `AI Routes` (`app/api/routes/ai.py`): Token usage stats (`/usage`), audit history (`/history`), and admin quota management (`/users/{id}/quota`).
 
-To run RAG tests:
+## AI Token Metering & Budget Quotas
+
+Prevent unexpected LLM bills with built-in per-user quota guardrails:
+* **Real-time Cost Tracking**: Calculates prompt, completion, and embedding costs in USD per request based on industry-standard pricing.
+* **Monthly Quota Enforcement**: If a user consumes their monthly token allowance (default: 50,000 tokens), subsequent inference requests return `HTTP 429 Too Many Requests`.
+* **Superuser Exemption & Management**: Admins have unlimited access and can adjust user quotas on the fly via `PATCH /api/v1/ai/users/{id}/quota`.
+* **Zero SaaS Dependencies**: All metrics and audit logs are recorded locally in PostgreSQL (`tokenusage` table).
+
+To run all AI, RAG, and Token Metering tests:
 
 ```console
-$ uv run pytest tests/services/test_rag.py tests/api/routes/test_rag.py
+$ uv run pytest tests/services/test_rag.py tests/api/routes/test_rag.py tests/services/test_token_metering.py tests/api/routes/test_ai_usage.py
 ```
 
 ## Email Templates

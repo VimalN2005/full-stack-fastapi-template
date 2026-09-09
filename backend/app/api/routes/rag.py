@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.services.rag import generate_rag_answer, hybrid_search, ingest_document
 from app.services.streaming import stream_rag_tokens
+from app.services.token_metering import check_token_quota, record_token_usage
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
@@ -35,12 +36,22 @@ def create_document(
 
     Automatically chunks the document, computes embeddings, and indexes for hybrid search.
     """
+    embed_tokens = max(1, len(document_in.content) // 4)
+    check_token_quota(session, current_user, estimated_tokens=embed_tokens)
+
     doc = ingest_document(
         session=session,
         user_id=current_user.id,
         title=document_in.title,
         content=document_in.content,
         content_type=document_in.content_type,
+    )
+    record_token_usage(
+        session=session,
+        user_id=current_user.id,
+        model_name="text-embedding-3-small",
+        prompt_tokens=embed_tokens,
+        completion_tokens=0,
     )
     chunk_count = len(doc.chunks) if doc.chunks else 0
     return DocumentPublic(
@@ -180,12 +191,27 @@ def query_knowledge_base(
     request: RAGQueryRequest,
 ) -> Any:
     """Execute complete RAG pipeline: retrieves relevant chunks and synthesizes a grounded answer with citations."""
+    check_token_quota(session, current_user, estimated_tokens=50)
+
     answer, sources = generate_rag_answer(
         session=session,
         user_id=current_user.id,
         query=request.query,
         top_k=request.top_k,
     )
+
+    prompt_tokens = max(1, len(request.query) // 4) + sum(
+        max(1, len(s.content) // 4) for s in sources
+    )
+    completion_tokens = max(1, len(answer) // 4)
+    record_token_usage(
+        session=session,
+        user_id=current_user.id,
+        model_name="gpt-4o-mini",
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+    )
+
     return RAGQueryResponse(
         query=request.query,
         answer=answer,
@@ -206,6 +232,8 @@ async def stream_knowledge_base(
     Proactively detects client disconnections (e.g. user clicks Stop Generating or closes tab)
     and cancels upstream execution immediately to avoid wasting tokens or compute.
     """
+    check_token_quota(session, current_user, estimated_tokens=50)
+
     event_stream = stream_rag_tokens(
         session=session,
         user_id=current_user.id,

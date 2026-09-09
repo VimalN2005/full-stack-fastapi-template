@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![pgvector](https://img.shields.io/badge/pgvector-0.5.0-FF6F00.svg)](https://github.com/pgvector/pgvector)
-[![Pytest](https://img.shields.io/badge/Pytest-64%2F64%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Pytest-75%2F75%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 Production-ready Full Stack FastAPI web application template with **Native Multi-Tenant RAG (Retrieval-Augmented Generation)** and **pgvector Hybrid Search**, eliminating external vector database overhead while ensuring strict enterprise data isolation.
@@ -103,6 +103,9 @@ All endpoints are authenticated using standard Bearer JWT tokens under `/api/v1/
 | `POST` | `/api/v1/rag/search` | Execute hybrid search (Dense Vector + Full-Text Search with RRF) |
 | `POST` | `/api/v1/rag/query` | Complete RAG Q&A: retrieves context and generates grounded answer |
 | `POST` | `/api/v1/rag/stream` | Token-by-token SSE streaming with proactive client disconnect abort guard |
+| `GET` | `/api/v1/ai/usage` | Current month token consumption, quota limit, remaining tokens & spend |
+| `GET` | `/api/v1/ai/history` | Historical audit log of prompt/completion tokens and estimated USD costs |
+| `PATCH` | `/api/v1/ai/users/{id}/quota` | Superuser-only endpoint to configure monthly token budget per user |
 
 ### Example: Document Ingestion
 
@@ -139,6 +142,25 @@ curl -N -X POST "http://localhost:8000/api/v1/rag/stream" \
     "query": "Summarize how pgvector handles indexing in this template",
     "top_k": 3
   }'
+```
+
+### Example: Check AI Token Quota & Spend
+
+```bash
+curl -X GET "http://localhost:8000/api/v1/ai/usage" \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>"
+```
+
+Response:
+```json
+{
+  "total_tokens_month": 1420,
+  "monthly_limit": 50000,
+  "remaining_tokens": 48580,
+  "estimated_cost_usd": 0.000426,
+  "usage_percentage": 2.84,
+  "is_unlimited": false
+}
 ```
 
 ---

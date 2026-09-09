@@ -10,6 +10,7 @@ from sqlmodel import Session
 
 from app.core.config import settings
 from app.services.rag import hybrid_search
+from app.services.token_metering import record_token_usage
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,10 @@ async def stream_rag_tokens(
     context_str = "\n\n".join(context_sections)
 
     # 3. Live LLM streaming if API key is provided
+    prompt_tokens = max(1, len(query) // 4) + sum(
+        max(1, len(m.content) // 4) for m in matched_chunks
+    )
+
     if settings.OPENAI_API_KEY:
         system_prompt = (
             "You are an intelligent knowledge assistant. "
@@ -76,6 +81,7 @@ async def stream_rag_tokens(
             f"--- CONTEXT ---\n{context_str}"
         )
         try:
+            tokens_streamed = 0
             async with httpx.AsyncClient(timeout=60.0) as client:
                 async with client.stream(
                     "POST",
@@ -101,6 +107,13 @@ async def stream_rag_tokens(
                             logger.info(
                                 "Client aborted connection. Halting upstream LLM stream."
                             )
+                            record_token_usage(
+                                session=session,
+                                user_id=user_id,
+                                model_name="gpt-4o-mini",
+                                prompt_tokens=prompt_tokens,
+                                completion_tokens=tokens_streamed,
+                            )
                             return
 
                         line = line.strip()
@@ -116,11 +129,21 @@ async def stream_rag_tokens(
                             delta = chunk_json["choices"][0]["delta"]
                             token = delta.get("content", "")
                             if token:
+                                tokens_streamed += 1
                                 yield _format_sse_event("token", token)
                         except json.JSONDecodeError, KeyError:
                             continue
 
-            yield _format_sse_event("done", {"status": "completed"})
+            record_token_usage(
+                session=session,
+                user_id=user_id,
+                model_name="gpt-4o-mini",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=tokens_streamed,
+            )
+            yield _format_sse_event(
+                "done", {"status": "completed", "total_tokens": tokens_streamed}
+            )
             return
         except Exception as e:
             logger.warning(
@@ -134,16 +157,34 @@ async def stream_rag_tokens(
         + " ".join(m.content.strip() for m in matched_chunks[:2])
     )
     words = simulated_text.split(" ")
+    tokens_sent = 0
 
     for idx, word in enumerate(words):
         # Disconnect check
         if await request.is_disconnected():
             logger.info("Client aborted connection during stream playback.")
+            record_token_usage(
+                session=session,
+                user_id=user_id,
+                model_name="gpt-4o-mini",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=tokens_sent,
+            )
             return
 
         token_to_send = word + (" " if idx < len(words) - 1 else "")
+        tokens_sent += 1
         yield _format_sse_event("token", token_to_send)
         # Yield control briefly to event loop for realistic pacing and cancellation checks
         await asyncio.sleep(0.005)
 
-    yield _format_sse_event("done", {"status": "completed", "total_tokens": len(words)})
+    record_token_usage(
+        session=session,
+        user_id=user_id,
+        model_name="gpt-4o-mini",
+        prompt_tokens=prompt_tokens,
+        completion_tokens=tokens_sent,
+    )
+    yield _format_sse_event(
+        "done", {"status": "completed", "total_tokens": tokens_sent}
+    )
