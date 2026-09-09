@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![pgvector](https://img.shields.io/badge/pgvector-0.5.0-FF6F00.svg)](https://github.com/pgvector/pgvector)
-[![Pytest](https://img.shields.io/badge/Pytest-75%2F75%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Pytest-84%2F84%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 Production-ready Full Stack FastAPI web application template with **Native Multi-Tenant RAG (Retrieval-Augmented Generation)** and **pgvector Hybrid Search**, eliminating external vector database overhead while ensuring strict enterprise data isolation.
@@ -103,6 +103,12 @@ All endpoints are authenticated using standard Bearer JWT tokens under `/api/v1/
 | `POST` | `/api/v1/rag/search` | Execute hybrid search (Dense Vector + Full-Text Search with RRF) |
 | `POST` | `/api/v1/rag/query` | Complete RAG Q&A: retrieves context and generates grounded answer |
 | `POST` | `/api/v1/rag/stream` | Token-by-token SSE streaming with proactive client disconnect abort guard |
+| `POST` | `/api/v1/chat/sessions` | Create a new conversational chat session |
+| `GET` | `/api/v1/chat/sessions` | List user's chat sessions ordered by latest update |
+| `GET` | `/api/v1/chat/sessions/{id}` | Get chat session details & full chronological message history |
+| `DELETE` | `/api/v1/chat/sessions/{id}` | Delete chat session and cascade delete all messages |
+| `POST` | `/api/v1/chat/sessions/{id}/messages` | Multi-turn conversational Q&A preserving context history |
+| `POST` | `/api/v1/chat/sessions/{id}/stream` | Multi-turn conversational token streaming via SSE |
 | `GET` | `/api/v1/ai/usage` | Current month token consumption, quota limit, remaining tokens & spend |
 | `GET` | `/api/v1/ai/history` | Historical audit log of prompt/completion tokens and estimated USD costs |
 | `PATCH` | `/api/v1/ai/users/{id}/quota` | Superuser-only endpoint to configure monthly token budget per user |
@@ -161,6 +167,28 @@ Response:
   "usage_percentage": 2.84,
   "is_unlimited": false
 }
+```
+
+### Example: Multi-Turn Conversational RAG Session
+
+```bash
+# 1. Create a persistent conversation session
+SESSION_ID=$(curl -s -X POST "http://localhost:8000/api/v1/chat/sessions" \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "FastAPI Architecture Discussion"}' | jq -r '.id')
+
+# 2. Turn 1: Initial Question
+curl -X POST "http://localhost:8000/api/v1/chat/sessions/$SESSION_ID/messages" \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "How does this template handle vector search?", "top_k": 3}'
+
+# 3. Turn 2: Follow-up Question with memory
+curl -X POST "http://localhost:8000/api/v1/chat/sessions/$SESSION_ID/messages" \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Can you elaborate on the second indexing method mentioned?", "top_k": 3}'
 ```
 
 ---

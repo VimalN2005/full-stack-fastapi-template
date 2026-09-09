@@ -66,6 +66,9 @@ class User(UserBase, table=True):
     token_usages: list[TokenUsage] = Relationship(
         back_populates="user", cascade_delete=True
     )
+    chat_sessions: list[ChatSession] = Relationship(
+        back_populates="user", cascade_delete=True
+    )
 
 
 # Properties to return via API, id is always required
@@ -282,3 +285,89 @@ class AIUsageStatsResponse(SQLModel):
 
 class UpdateQuotaRequest(SQLModel):
     monthly_token_limit: int = Field(ge=0)
+
+
+# ==========================================
+# Chat Session & Multi-Turn Memory Models
+# ==========================================
+
+
+class ChatSessionBase(SQLModel):
+    title: str = Field(default="New Chat", max_length=255)
+
+
+class ChatSessionCreate(SQLModel):
+    title: str | None = Field(default=None, max_length=255)
+
+
+class ChatSession(ChatSessionBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+    )
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+        index=True,
+    )
+    updated_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+        index=True,
+    )
+    user: User | None = Relationship(back_populates="chat_sessions")
+    messages: list[ChatMessage] = Relationship(
+        back_populates="session", cascade_delete=True
+    )
+
+
+class ChatMessageBase(SQLModel):
+    role: str = Field(max_length=20)  # "user", "assistant", or "system"
+    content: str
+
+
+class ChatMessageCreate(SQLModel):
+    content: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class ChatMessage(ChatMessageBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    session_id: uuid.UUID = Field(
+        foreign_key="chatsession.id", nullable=False, index=True, ondelete="CASCADE"
+    )
+    sources: str | None = Field(default=None)  # JSON-serialized list of sources
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+        index=True,
+    )
+    session: ChatSession | None = Relationship(back_populates="messages")
+
+
+class ChatMessagePublic(ChatMessageBase):
+    id: uuid.UUID
+    session_id: uuid.UUID
+    sources: str | None = None
+    created_at: datetime | None = None
+
+
+class ChatSessionPublic(ChatSessionBase):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    message_count: int = 0
+
+
+class ChatSessionsPublic(SQLModel):
+    data: list[ChatSessionPublic]
+    count: int
+
+
+class ChatSessionDetailPublic(ChatSessionBase):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    messages: list[ChatMessagePublic] = []
