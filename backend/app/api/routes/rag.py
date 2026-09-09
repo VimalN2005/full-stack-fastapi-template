@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import col, func, select
 
@@ -12,13 +12,19 @@ from app.models import (
     DocumentCreate,
     DocumentPublic,
     DocumentsPublic,
+    DocumentStatusResponse,
     Message,
     RAGQueryRequest,
     RAGQueryResponse,
     RAGSearchRequest,
     RAGSearchResponse,
 )
-from app.services.rag import generate_rag_answer, hybrid_search, ingest_document
+from app.services.rag import (
+    generate_rag_answer,
+    hybrid_search,
+    ingest_document,
+    process_document_in_background,
+)
 from app.services.streaming import stream_rag_tokens
 from app.services.token_metering import check_token_quota, record_token_usage
 
@@ -31,13 +37,47 @@ def create_document(
     session: SessionDep,
     current_user: CurrentUser,
     document_in: DocumentCreate,
+    background_tasks: BackgroundTasks,
+    response: Response,
+    background: bool = False,
 ) -> Any:
     """Upload and ingest a document into the user's private knowledge base.
 
-    Automatically chunks the document, computes embeddings, and indexes for hybrid search.
+    If background=True, creates a processing placeholder, enqueues ingestion to background tasks,
+    and returns HTTP 202 Accepted.
     """
     embed_tokens = max(1, len(document_in.content) // 4)
     check_token_quota(session, current_user, estimated_tokens=embed_tokens)
+
+    if background:
+        doc = Document(
+            title=document_in.title,
+            content_type=document_in.content_type,
+            status="processing",
+            owner_id=current_user.id,
+        )
+        session.add(doc)
+        session.commit()
+        session.refresh(doc)
+
+        background_tasks.add_task(
+            process_document_in_background,
+            doc_id=doc.id,
+            user_id=current_user.id,
+            content=document_in.content,
+            engine=session.get_bind(),
+        )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return DocumentPublic(
+            id=doc.id,
+            title=doc.title,
+            content_type=doc.content_type,
+            status=doc.status,
+            owner_id=doc.owner_id,
+            created_at=doc.created_at,
+            chunk_count=0,
+            error_message=None,
+        )
 
     doc = ingest_document(
         session=session,
@@ -58,9 +98,11 @@ def create_document(
         id=doc.id,
         title=doc.title,
         content_type=doc.content_type,
+        status=doc.status,
         owner_id=doc.owner_id,
         created_at=doc.created_at,
         chunk_count=chunk_count,
+        error_message=doc.error_message,
     )
 
 
@@ -105,9 +147,11 @@ def read_documents(
             id=d.id,
             title=d.title,
             content_type=d.content_type,
+            status=d.status,
             owner_id=d.owner_id,
             created_at=d.created_at,
             chunk_count=counts_map.get(d.id, 0),
+            error_message=d.error_message,
         )
         for d in docs
     ]
@@ -133,9 +177,35 @@ def read_document(
         id=doc.id,
         title=doc.title,
         content_type=doc.content_type,
+        status=doc.status,
         owner_id=doc.owner_id,
         created_at=doc.created_at,
         chunk_count=chunk_count,
+        error_message=doc.error_message,
+    )
+
+
+@router.get("/documents/{id}/status", response_model=DocumentStatusResponse)
+def get_document_status(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+) -> Any:
+    """Check asynchronous ingestion status and chunk count for a document."""
+    doc = session.get(Document, id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.owner_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    chunk_count = len(doc.chunks) if doc.chunks else 0
+    return DocumentStatusResponse(
+        id=doc.id,
+        title=doc.title,
+        status=doc.status,
+        chunk_count=chunk_count,
+        error_message=doc.error_message,
     )
 
 

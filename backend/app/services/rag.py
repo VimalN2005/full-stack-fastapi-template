@@ -1,6 +1,8 @@
+import logging
 import math
 import re
 import uuid
+from typing import Any
 
 import httpx
 from sqlalchemy import func
@@ -9,6 +11,8 @@ from sqlmodel import Session, col, select
 from app.core.config import settings
 from app.models import Document, DocumentChunk, RAGChunkMatch
 from app.services.embeddings import embedding_service
+
+logger = logging.getLogger(__name__)
 
 
 def split_text_into_chunks(
@@ -103,6 +107,80 @@ def ingest_document(
     session.commit()
     session.refresh(doc)
     return doc
+
+
+def process_document_in_background(
+    doc_id: uuid.UUID,
+    user_id: uuid.UUID,
+    content: str,
+    chunk_size: int = 500,
+    chunk_overlap: int = 50,
+    engine: Any = None,
+) -> None:
+    """Asynchronous background worker to chunk, embed, and index documents without blocking HTTP requests."""
+    from app.services.token_metering import record_token_usage
+
+    if engine is None:
+        from app.core.db import engine as default_engine
+
+        engine = default_engine
+
+    with Session(engine) as session:
+        doc = session.get(Document, doc_id)
+        if not doc:
+            logger.error("Background ingestion aborted: Document %s not found", doc_id)
+            return
+
+        try:
+            # 1. Chunk content
+            text_chunks = split_text_into_chunks(content, chunk_size, chunk_overlap)
+            if not text_chunks:
+                text_chunks = [content.strip() or "Empty document"]
+
+            # 2. Compute vector embeddings in batch
+            embeddings = embedding_service.get_embeddings(text_chunks)
+
+            # 3. Create chunks with tenant isolation
+            chunks_to_create = []
+            for idx, (chunk_text, vector) in enumerate(
+                zip(text_chunks, embeddings, strict=False)
+            ):
+                chunk = DocumentChunk(
+                    document_id=doc.id,
+                    owner_id=user_id,
+                    chunk_index=idx,
+                    content=chunk_text,
+                    embedding=vector,
+                )
+                chunks_to_create.append(chunk)
+
+            session.add_all(chunks_to_create)
+
+            # 4. Mark document status as ready
+            doc.status = "ready"
+            session.add(doc)
+            session.commit()
+
+            # 5. Record token usage
+            embed_tokens = sum(max(1, len(c) // 4) for c in text_chunks)
+            record_token_usage(
+                session=session,
+                user_id=user_id,
+                model_name="text-embedding-3-small",
+                prompt_tokens=embed_tokens,
+                completion_tokens=0,
+            )
+            logger.info(
+                "Background ingestion completed successfully for doc %s (%d chunks)",
+                doc_id,
+                len(chunks_to_create),
+            )
+        except Exception as e:
+            logger.exception("Background ingestion failed for doc %s: %s", doc_id, e)
+            doc.status = "failed"
+            doc.error_message = str(e)
+            session.add(doc)
+            session.commit()
 
 
 def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:

@@ -153,6 +153,7 @@ class NewPassword(SQLModel):
 class DocumentBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)
     content_type: str = Field(default="text/plain", max_length=50)
+    status: str = Field(default="ready", max_length=20)
 
 
 class DocumentCreate(DocumentBase):
@@ -165,6 +166,7 @@ class Document(DocumentBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
+    error_message: str | None = Field(default=None)
     owner_id: uuid.UUID = Field(
         foreign_key="user.id", nullable=False, ondelete="CASCADE"
     )
@@ -179,6 +181,15 @@ class DocumentPublic(DocumentBase):
     owner_id: uuid.UUID
     created_at: datetime | None = None
     chunk_count: int = 0
+    error_message: str | None = None
+
+
+class DocumentStatusResponse(SQLModel):
+    id: uuid.UUID
+    title: str
+    status: str
+    chunk_count: int = 0
+    error_message: str | None = None
 
 
 class DocumentsPublic(SQLModel):
