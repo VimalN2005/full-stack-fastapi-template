@@ -87,3 +87,47 @@ def test_rag_document_not_found(
     )
     assert res.status_code == 404
     assert res.json()["detail"] == "Document not found"
+
+
+def test_rag_streaming_endpoint(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    """Test token-by-token SSE streaming endpoint with sources and done events."""
+    # 1. Ingest test doc
+    doc_res = client.post(
+        f"{settings.API_V1_STR}/rag/documents",
+        headers=superuser_token_headers,
+        json={
+            "title": "Quantum Computing Fundamentals",
+            "content": "Qubits exhibit superposition and entanglement, enabling exponential speedups in specific algorithms.",
+            "content_type": "text/plain",
+        },
+    )
+    assert doc_res.status_code == 200
+    doc_id = doc_res.json()["id"]
+
+    # 2. Call stream endpoint using client.stream
+    with client.stream(
+        "POST",
+        f"{settings.API_V1_STR}/rag/stream",
+        headers=superuser_token_headers,
+        json={"query": "What enables quantum speedup?", "top_k": 3},
+    ) as stream_resp:
+        assert stream_resp.status_code == 200
+        assert "text/event-stream" in stream_resp.headers["content-type"]
+
+        events: list[str] = []
+        for line in stream_resp.iter_lines():
+            if line.startswith("event: "):
+                events.append(line.replace("event: ", "").strip())
+
+        # Must have received "sources", "token", and "done"
+        assert "sources" in events
+        assert "token" in events
+        assert "done" in events
+
+    # Cleanup
+    client.delete(
+        f"{settings.API_V1_STR}/rag/documents/{doc_id}",
+        headers=superuser_token_headers,
+    )

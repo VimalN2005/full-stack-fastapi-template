@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![pgvector](https://img.shields.io/badge/pgvector-0.5.0-FF6F00.svg)](https://github.com/pgvector/pgvector)
-[![Pytest](https://img.shields.io/badge/Pytest-63%2F63%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Pytest-64%2F64%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 Production-ready Full Stack FastAPI web application template with **Native Multi-Tenant RAG (Retrieval-Augmented Generation)** and **pgvector Hybrid Search**, eliminating external vector database overhead while ensuring strict enterprise data isolation.
@@ -102,6 +102,7 @@ All endpoints are authenticated using standard Bearer JWT tokens under `/api/v1/
 | `DELETE` | `/api/v1/rag/documents/{id}` | Delete document and cascade delete all associated chunks/vectors |
 | `POST` | `/api/v1/rag/search` | Execute hybrid search (Dense Vector + Full-Text Search with RRF) |
 | `POST` | `/api/v1/rag/query` | Complete RAG Q&A: retrieves context and generates grounded answer |
+| `POST` | `/api/v1/rag/stream` | Token-by-token SSE streaming with proactive client disconnect abort guard |
 
 ### Example: Document Ingestion
 
@@ -124,6 +125,18 @@ curl -X POST "http://localhost:8000/api/v1/rag/search" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "How to store embeddings in PostgreSQL?",
+    "top_k": 3
+  }'
+```
+
+### Example: Real-time Token Streaming (SSE)
+
+```bash
+curl -N -X POST "http://localhost:8000/api/v1/rag/stream" \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Summarize how pgvector handles indexing in this template",
     "top_k": 3
   }'
 ```

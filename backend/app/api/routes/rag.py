@@ -1,7 +1,8 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -18,6 +19,7 @@ from app.models import (
     RAGSearchResponse,
 )
 from app.services.rag import generate_rag_answer, hybrid_search, ingest_document
+from app.services.streaming import stream_rag_tokens
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
@@ -188,4 +190,35 @@ def query_knowledge_base(
         query=request.query,
         answer=answer,
         sources=sources,
+    )
+
+
+@router.post("/stream")
+async def stream_knowledge_base(
+    *,
+    request: Request,
+    session: SessionDep,
+    current_user: CurrentUser,
+    query_in: RAGQueryRequest,
+) -> StreamingResponse:
+    """Stream token-by-token RAG answer via Server-Sent Events (SSE).
+
+    Proactively detects client disconnections (e.g. user clicks Stop Generating or closes tab)
+    and cancels upstream execution immediately to avoid wasting tokens or compute.
+    """
+    event_stream = stream_rag_tokens(
+        session=session,
+        user_id=current_user.id,
+        query=query_in.query,
+        request=request,
+        top_k=query_in.top_k,
+    )
+    return StreamingResponse(
+        event_stream,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

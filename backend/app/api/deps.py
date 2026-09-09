@@ -41,7 +41,7 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
         )
     try:
         user_id = uuid.UUID(token_data.sub) if token_data.sub else None
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         user_id = None
     user = session.get(User, user_id) if user_id else None
     if not user:

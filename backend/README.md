@@ -131,13 +131,15 @@ This backend includes native support for Retrieval-Augmented Generation (RAG) us
 ### Features
 * **Native Vector Storage**: Chunks and embeddings are stored directly in PostgreSQL with an HNSW cosine distance index (`ix_documentchunk_embedding_hnsw`).
 * **Hybrid Search (RRF)**: Combines dense vector similarity with PostgreSQL full-text search (`tsvector`) via Reciprocal Rank Fusion.
+* **Abort-Aware Token Streaming**: Real-time Server-Sent Events (SSE) streaming with `request.is_disconnected()` guard to cancel upstream LLM calls when users cancel or disconnect.
 * **Strict Multi-Tenancy**: All vector queries filter strictly by `owner_id` to guarantee tenant data privacy.
 * **Offline Testing**: Deterministic normalized embedding fallback allows running test suites offline without OpenAI credentials.
 
 ### Services & Endpoints
 * `EmbeddingService` (`app/services/embeddings.py`): Generates embeddings via OpenAI or offline fallback.
 * `RAGService` (`app/services/rag.py`): Chunking, ingestion, and hybrid search ranking.
-* `RAG Routes` (`app/api/routes/rag.py`): Ingestion, document CRUD, hybrid search, and question answering.
+* `StreamingService` (`app/services/streaming.py`): Abort-aware SSE token streaming generator.
+* `RAG Routes` (`app/api/routes/rag.py`): Ingestion, document CRUD, hybrid search, question answering, and real-time SSE streaming.
 
 To run RAG tests:
 
