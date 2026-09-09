@@ -1,8 +1,9 @@
 import uuid
 from datetime import UTC, datetime
 
+from pgvector.sqlalchemy import Vector
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import Column, DateTime, Text
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -57,6 +58,9 @@ class User(UserBase, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     items: list[Item] = Relationship(back_populates="owner", cascade_delete=True)
+    documents: list[Document] = Relationship(
+        back_populates="owner", cascade_delete=True
+    )
 
 
 # Properties to return via API, id is always required
@@ -131,3 +135,95 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+# ==========================================
+# RAG (Retrieval-Augmented Generation) Models
+# ==========================================
+
+
+class DocumentBase(SQLModel):
+    title: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(default="text/plain", max_length=50)
+
+
+class DocumentCreate(DocumentBase):
+    content: str = Field(min_length=1)
+
+
+class Document(DocumentBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+    )
+    owner: User | None = Relationship(back_populates="documents")
+    chunks: list[DocumentChunk] = Relationship(
+        back_populates="document", cascade_delete=True
+    )
+
+
+class DocumentPublic(DocumentBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    created_at: datetime | None = None
+    chunk_count: int = 0
+
+
+class DocumentsPublic(SQLModel):
+    data: list[DocumentPublic]
+    count: int
+
+
+class DocumentChunk(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    document_id: uuid.UUID = Field(
+        foreign_key="document.id", nullable=False, ondelete="CASCADE"
+    )
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+    )
+    chunk_index: int = Field(default=0)
+    content: str = Field(sa_column=Column(Text, nullable=False))
+    embedding: list[float] | None = Field(
+        default=None,
+        sa_column=Column(Vector(1536), nullable=True),
+    )
+    document: Document | None = Relationship(back_populates="chunks")
+
+
+# RAG Search & Query schemas
+class RAGSearchRequest(SQLModel):
+    query: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=20)
+    min_score: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class RAGChunkMatch(SQLModel):
+    chunk_id: uuid.UUID
+    document_id: uuid.UUID
+    document_title: str
+    chunk_index: int
+    content: str
+    score: float
+    match_type: str = "hybrid"  # "dense", "keyword", or "hybrid"
+
+
+class RAGSearchResponse(SQLModel):
+    query: str
+    results: list[RAGChunkMatch]
+    total: int
+
+
+class RAGQueryRequest(SQLModel):
+    query: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class RAGQueryResponse(SQLModel):
+    query: str
+    answer: str
+    sources: list[RAGChunkMatch]
