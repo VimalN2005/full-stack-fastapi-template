@@ -131,3 +131,53 @@ def test_rag_streaming_endpoint(
         f"{settings.API_V1_STR}/rag/documents/{doc_id}",
         headers=superuser_token_headers,
     )
+
+
+def test_rag_search_with_reranking(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    # 1. Ingest document
+    doc_res = client.post(
+        f"{settings.API_V1_STR}/rag/documents",
+        headers=superuser_token_headers,
+        json={
+            "title": "Database Indexing Principles",
+            "content": "B-Tree indexes optimize equality and range searches. Hash indexes only support equality. HNSW indexes support approximate nearest neighbor vector search.",
+            "content_type": "text/plain",
+        },
+    )
+    assert doc_res.status_code == 200
+    doc_id = doc_res.json()["id"]
+
+    # 2. Search with rerank=True (default)
+    search_res = client.post(
+        f"{settings.API_V1_STR}/rag/search",
+        headers=superuser_token_headers,
+        json={
+            "query": "HNSW nearest neighbor vector search",
+            "top_k": 3,
+            "rerank": True,
+        },
+    )
+    assert search_res.status_code == 200
+    data = search_res.json()
+    assert data["total"] >= 1
+    assert any(r["match_type"] == "reranked" for r in data["results"])
+
+    # 3. Search with rerank=False
+    search_no_rerank = client.post(
+        f"{settings.API_V1_STR}/rag/search",
+        headers=superuser_token_headers,
+        json={
+            "query": "HNSW nearest neighbor vector search",
+            "top_k": 3,
+            "rerank": False,
+        },
+    )
+    assert search_no_rerank.status_code == 200
+
+    # Cleanup
+    client.delete(
+        f"{settings.API_V1_STR}/rag/documents/{doc_id}",
+        headers=superuser_token_headers,
+    )

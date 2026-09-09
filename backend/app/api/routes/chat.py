@@ -145,6 +145,7 @@ def send_chat_message(
         session_id=session_id,
         user_query=message_in.content,
         top_k=message_in.top_k,
+        rerank=message_in.rerank,
     )
     return ChatMessagePublic(
         id=assistant_msg.id,
@@ -173,6 +174,7 @@ async def stream_chat_message(
         user_query=message_in.content,
         request=request,
         top_k=message_in.top_k,
+        rerank=message_in.rerank,
     )
     return StreamingResponse(
         event_stream,

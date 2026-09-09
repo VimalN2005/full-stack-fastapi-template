@@ -156,13 +156,14 @@ def generate_multi_turn_answer(
     session_id: uuid.UUID,
     user_query: str,
     top_k: int = 5,
+    rerank: bool = True,
 ) -> tuple[str, list[RAGChunkMatch], ChatMessage, ChatMessage]:
     """Execute multi-turn conversational RAG:
 
     1. Checks token quota.
     2. Retrieves conversation history.
     3. Saves user message.
-    4. Executes pgvector hybrid search using query + history context.
+    4. Executes pgvector hybrid search using query + history context with cross-encoder reranking.
     5. Synthesizes grounded answer.
     6. Saves assistant response with source citations.
     7. Records token usage.
@@ -199,6 +200,7 @@ def generate_multi_turn_answer(
         user_id=user.id,
         query=search_query,
         top_k=top_k,
+        rerank=rerank,
     )
 
     # 5. Build context sections

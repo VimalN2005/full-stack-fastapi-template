@@ -32,14 +32,17 @@ async def stream_rag_tokens(
     query: str,
     request: Request,
     top_k: int = 5,
+    rerank: bool = True,
 ) -> AsyncGenerator[str]:
     """Asynchronously stream tokens for RAG answers with proactive disconnect detection.
 
     If the client closes the browser tab or aborts the request, this generator halts execution
     immediately, terminating upstream LLM connections and preventing wasted tokens/compute.
     """
-    # 1. Hybrid search retrieval
-    matched_chunks = hybrid_search(session, user_id=user_id, query=query, top_k=top_k)
+    # 1. Hybrid search retrieval with optional cross-encoder reranking
+    matched_chunks = hybrid_search(
+        session, user_id=user_id, query=query, top_k=top_k, rerank=rerank
+    )
 
     # 2. Emit sources metadata event
     sources_data = [
@@ -199,6 +202,7 @@ async def stream_chat_session_tokens(
     user_query: str,
     request: Request,
     top_k: int = 5,
+    rerank: bool = True,
 ) -> AsyncGenerator[str]:
     """Asynchronously stream tokens for multi-turn RAG answer within a chat session."""
     # 1. Quota check
@@ -235,7 +239,11 @@ async def stream_chat_session_tokens(
             search_query = f"{last_user_msgs[-1]} {user_query}"
 
     matched_chunks = hybrid_search(
-        session, user_id=user.id, query=search_query, top_k=top_k
+        session,
+        user_id=user.id,
+        query=search_query,
+        top_k=top_k,
+        rerank=rerank,
     )
 
     sources_data = [

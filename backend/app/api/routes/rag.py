@@ -175,6 +175,7 @@ def search_knowledge_base(
         query=request.query,
         top_k=request.top_k,
         min_score=request.min_score,
+        rerank=request.rerank,
     )
     return RAGSearchResponse(
         query=request.query,
@@ -198,6 +199,7 @@ def query_knowledge_base(
         user_id=current_user.id,
         query=request.query,
         top_k=request.top_k,
+        rerank=request.rerank,
     )
 
     prompt_tokens = max(1, len(request.query) // 4) + sum(
@@ -240,6 +242,7 @@ async def stream_knowledge_base(
         query=query_in.query,
         request=request,
         top_k=query_in.top_k,
+        rerank=query_in.rerank,
     )
     return StreamingResponse(
         event_stream,

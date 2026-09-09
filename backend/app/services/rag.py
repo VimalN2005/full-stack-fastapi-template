@@ -124,6 +124,7 @@ def hybrid_search(
     top_k: int = 5,
     min_score: float = 0.0,
     rrf_k: int = 60,
+    rerank: bool = False,
 ) -> list[RAGChunkMatch]:
     """Execute hybrid search (Dense Vector + Full-Text Search) with Reciprocal Rank Fusion (RRF).
 
@@ -260,10 +261,15 @@ def hybrid_search(
                 match_type=match_types.get(cid, "hybrid"),
             )
         )
-        if len(results) >= top_k:
+        if len(results) >= (top_k * 3 if rerank else top_k):
             break
 
-    return results
+    if rerank and results:
+        from app.services.reranker import rerank_chunks
+
+        return rerank_chunks(query=query, chunks=results, top_k=top_k)
+
+    return results[:top_k]
 
 
 def generate_rag_answer(
@@ -271,9 +277,12 @@ def generate_rag_answer(
     user_id: uuid.UUID,
     query: str,
     top_k: int = 5,
+    rerank: bool = True,
 ) -> tuple[str, list[RAGChunkMatch]]:
-    """Execute hybrid search, assemble grounding context, and generate answer with source citations."""
-    matched_chunks = hybrid_search(session, user_id=user_id, query=query, top_k=top_k)
+    """Execute two-stage hybrid search + reranking, assemble grounding context, and generate answer with source citations."""
+    matched_chunks = hybrid_search(
+        session, user_id=user_id, query=query, top_k=top_k, rerank=rerank
+    )
 
     if not matched_chunks:
         return (

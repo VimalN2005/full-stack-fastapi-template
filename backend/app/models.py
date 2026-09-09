@@ -208,6 +208,7 @@ class RAGSearchRequest(SQLModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=5, ge=1, le=20)
     min_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    rerank: bool = Field(default=True)
 
 
 class RAGChunkMatch(SQLModel):
@@ -217,7 +218,7 @@ class RAGChunkMatch(SQLModel):
     chunk_index: int
     content: str
     score: float
-    match_type: str = "hybrid"  # "dense", "keyword", or "hybrid"
+    match_type: str = "hybrid"  # "dense", "keyword", "hybrid", or "reranked"
 
 
 class RAGSearchResponse(SQLModel):
@@ -229,6 +230,7 @@ class RAGSearchResponse(SQLModel):
 class RAGQueryRequest(SQLModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=5, ge=1, le=20)
+    rerank: bool = Field(default=True)
 
 
 class RAGQueryResponse(SQLModel):
@@ -329,6 +331,7 @@ class ChatMessageBase(SQLModel):
 class ChatMessageCreate(SQLModel):
     content: str = Field(min_length=1)
     top_k: int = Field(default=5, ge=1, le=20)
+    rerank: bool = Field(default=True)
 
 
 class ChatMessage(ChatMessageBase, table=True):

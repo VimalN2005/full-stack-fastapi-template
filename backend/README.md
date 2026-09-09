@@ -141,9 +141,17 @@ This backend includes native support for Retrieval-Augmented Generation (RAG) us
 * `StreamingService` (`app/services/streaming.py`): Abort-aware SSE token streaming generator (single-shot & multi-turn).
 * `TokenMeteringService` (`app/services/token_metering.py`): In-database token consumption tracking, cost estimation ($/1M tokens), and quota enforcement.
 * `ChatMemoryService` (`app/services/chat_memory.py`): PostgreSQL-persisted multi-turn chat sessions, sliding-window conversation memory, and contextual search rephrasing.
+* `RerankerService` (`app/services/reranker.py`): Two-stage cross-encoder relevance scoring (Cohere API / local deterministic cross-scoring).
 * `RAG Routes` (`app/api/routes/rag.py`): Ingestion, document CRUD, hybrid search, question answering, and real-time SSE streaming.
 * `AI Routes` (`app/api/routes/ai.py`): Token usage stats (`/usage`), audit history (`/history`), and admin quota management (`/users/{id}/quota`).
 * `Chat Routes` (`app/api/routes/chat.py`): Session lifecycle, multi-turn conversational Q&A, and conversational SSE streaming.
+
+## Two-Stage Hybrid Retrieval & Re-Ranking
+
+Maximize response precision and minimize hallucination risk:
+* **Stage 1 (Hybrid Candidate Retrieval)**: Merges dense vector distance and BM25 full-text rank via Reciprocal Rank Fusion ($N = 15$).
+* **Stage 2 (Cross-Attention Re-ranking)**: Evaluates query-chunk token alignment, n-gram overlap, and term density to select the top $K$ ($K=3-5$) most relevant chunks for LLM context assembly.
+* **Pluggable Architecture**: Automatically uses Cohere Rerank API if `COHERE_API_KEY` is provided, with an offline-compatible cross-encoder fallback.
 
 ## Multi-Turn Conversation Memory & Sessions
 
@@ -161,10 +169,10 @@ Prevent unexpected LLM bills with built-in per-user quota guardrails:
 * **Superuser Exemption & Management**: Admins have unlimited access and can adjust user quotas on the fly via `PATCH /api/v1/ai/users/{id}/quota`.
 * **Zero SaaS Dependencies**: All metrics and audit logs are recorded locally in PostgreSQL (`tokenusage` table).
 
-To run all AI, RAG, Chat, and Token Metering tests:
+To run all AI, RAG, Chat, Reranking, and Token Metering tests:
 
 ```console
-$ uv run pytest tests/services/test_rag.py tests/api/routes/test_rag.py tests/services/test_token_metering.py tests/api/routes/test_ai_usage.py tests/services/test_chat_memory.py tests/api/routes/test_chat.py
+$ uv run pytest tests/services/test_rag.py tests/api/routes/test_rag.py tests/services/test_token_metering.py tests/api/routes/test_ai_usage.py tests/services/test_chat_memory.py tests/api/routes/test_chat.py tests/services/test_reranker.py
 ```
 
 ## Email Templates

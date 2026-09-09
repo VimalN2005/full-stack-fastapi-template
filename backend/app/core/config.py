@@ -32,10 +32,12 @@ class Settings(BaseSettings):
 
     # RAG & AI Settings
     OPENAI_API_KEY: str | None = None
+    COHERE_API_KEY: str | None = None
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536
     RAG_TOP_K: int = 5
     RAG_SIMILARITY_THRESHOLD: float = 0.5
+    RAG_RERANKING_ENABLED: bool = True
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

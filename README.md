@@ -4,10 +4,10 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![pgvector](https://img.shields.io/badge/pgvector-0.5.0-FF6F00.svg)](https://github.com/pgvector/pgvector)
-[![Pytest](https://img.shields.io/badge/Pytest-84%2F84%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Pytest-89%2F89%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-Production-ready Full Stack FastAPI web application template with **Native Multi-Tenant RAG (Retrieval-Augmented Generation)** and **pgvector Hybrid Search**, eliminating external vector database overhead while ensuring strict enterprise data isolation.
+Production-ready Full Stack FastAPI web application template with **Native Multi-Tenant RAG (Retrieval-Augmented Generation)**, **pgvector Hybrid Search**, and **Two-Stage Cross-Encoder Re-Ranking**, eliminating external vector database overhead while ensuring strict enterprise data isolation.
 
 ---
 
@@ -15,7 +15,7 @@ Production-ready Full Stack FastAPI web application template with **Native Multi
 
 Most FastAPI templates only cover traditional CRUD operations. When teams build AI features, they are often forced to introduce external vector databases (e.g. Pinecone, Chroma, Qdrant), leading to duplicate storage costs, syncing bugs, and data security risks.
 
-This template solves that by integrating **`pgvector`** directly into the existing **PostgreSQL + SQLModel** stack:
+This template solves that by integrating **`pgvector`** directly into the existing **PostgreSQL + SQLModel** stack with a high-precision two-stage retrieval pipeline:
 
 ```mermaid
 flowchart TD
@@ -25,10 +25,11 @@ flowchart TD
 
     subgraph FastAPI Backend
         Auth["JWT Auth & Tenant Context"]
-        RAGRouter["/api/v1/rag/* Router"]
+        RAGRouter["/api/v1/rag/* & /api/v1/chat/*"]
         Chunker["Sliding-Window Chunker"]
         EmbeddingSvc["Embedding Service (OpenAI / Offline)"]
-        RRF["Reciprocal Rank Fusion (RRF) Engine"]
+        RRF["Stage 1: Reciprocal Rank Fusion (RRF)"]
+        Reranker["Stage 2: Cross-Encoder Re-Ranking (Cohere / Local)"]
     end
 
     subgraph PostgreSQL Database
@@ -49,15 +50,15 @@ flowchart TD
     Auth -->|Keyword BM25 Query| FTSIdx
     VectorIdx --> RRF
     FTSIdx --> RRF
-    RRF -->|Ranked Chunks + Grounded Answer| UserApp
+    RRF -->|Top Candidate Chunks| Reranker
+    Reranker -->|High-Precision Reranked Context| UserApp
 ```
 
 ### Key AI / RAG Capabilities:
 * 💾 **No External Vector Database Needed**: Dense 1536-dim embeddings stored alongside relational data using official `pgvector/pgvector:pg17` and HNSW indexing (`vector_cosine_ops`).
-* 🔒 **Strict Multi-Tenant Isolation**: Chunks and embeddings are indexed with `owner_id`. A user can never retrieve or view vectors belonging to another user.
-* ⚡ **Hybrid Search with RRF**: Combines dense semantic similarity (`<=>` cosine distance) with PostgreSQL full-text search (`tsvector` & `ts_rank_cd`) through **Reciprocal Rank Fusion**:
-  $$\text{RRF}(d) = \sum_{m \in \{\text{dense}, \text{keyword}\}} \frac{1}{60 + \text{rank}_m(d)}$$
-* 🤖 **Offline & CI/CD Friendly**: Includes a deterministic embedding fallback that allows 100% of test suites to pass locally without requiring a paid OpenAI API key.
+* 🔒 **Strict Multi-Tenant Isolation**: Chunks, chat sessions, and embeddings are indexed with `owner_id` / `user_id`. A user can never retrieve or view data belonging to another user.
+* ⚡ **Two-Stage Hybrid Search & Re-ranking**: Stage 1 combines dense semantic similarity (`<=>` cosine distance) with PostgreSQL full-text search (`tsvector`) via **Reciprocal Rank Fusion (RRF)**. Stage 2 evaluates cross-attention relevance to eliminate false positives and promote the most accurate context chunks.
+* 🤖 **Offline & CI/CD Friendly**: Includes a deterministic embedding fallback and local cross-encoder scoring that allows 100% of test suites to pass locally without requiring paid API keys.
 
 ---
 
