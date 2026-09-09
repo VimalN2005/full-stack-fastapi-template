@@ -124,6 +124,27 @@ $ alembic upgrade head
 
 If you don't want to start with the default models and want to remove them / modify them, from the beginning, without having any previous revision, you can remove the revision files (`.py` Python files) under `./backend/app/alembic/versions/`. And then create a first migration as described above.
 
+## RAG & Vector Search with pgvector
+
+This backend includes native support for Retrieval-Augmented Generation (RAG) using PostgreSQL's `pgvector` extension and SQLModel.
+
+### Features
+* **Native Vector Storage**: Chunks and embeddings are stored directly in PostgreSQL with an HNSW cosine distance index (`ix_documentchunk_embedding_hnsw`).
+* **Hybrid Search (RRF)**: Combines dense vector similarity with PostgreSQL full-text search (`tsvector`) via Reciprocal Rank Fusion.
+* **Strict Multi-Tenancy**: All vector queries filter strictly by `owner_id` to guarantee tenant data privacy.
+* **Offline Testing**: Deterministic normalized embedding fallback allows running test suites offline without OpenAI credentials.
+
+### Services & Endpoints
+* `EmbeddingService` (`app/services/embeddings.py`): Generates embeddings via OpenAI or offline fallback.
+* `RAGService` (`app/services/rag.py`): Chunking, ingestion, and hybrid search ranking.
+* `RAG Routes` (`app/api/routes/rag.py`): Ingestion, document CRUD, hybrid search, and question answering.
+
+To run RAG tests:
+
+```console
+$ uv run pytest tests/services/test_rag.py tests/api/routes/test_rag.py
+```
+
 ## Email Templates
 
 The email templates are written with [React Email](https://react.email) in `./packages/react-email/`. The `emails` directory holds one component per email and the `ui` directory holds the shared components (layout, heading, button, link, callout).
