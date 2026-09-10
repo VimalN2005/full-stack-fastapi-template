@@ -4,7 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![pgvector](https://img.shields.io/badge/pgvector-0.5.0-FF6F00.svg)](https://github.com/pgvector/pgvector)
-[![Pytest](https://img.shields.io/badge/Pytest-89%2F89%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Pytest-90%2F90%20passed-brightgreen.svg?logo=pytest&logoColor=white)](https://pytest.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 Production-ready Full Stack FastAPI web application template with **Native Multi-Tenant RAG (Retrieval-Augmented Generation)**, **pgvector Hybrid Search**, and **Two-Stage Cross-Encoder Re-Ranking**, eliminating external vector database overhead while ensuring strict enterprise data isolation.
@@ -86,7 +87,7 @@ flowchart TD
 - 📫 Email-based password recovery.
 - ✉️ [React Email](https://react.email) for email templates.
 - 📬 [Mailpit](https://mailpit.axllent.org) for local email testing.
-- ✅ Full test suite with [Pytest](https://pytest.org) (63 tests).
+- ✅ Full test suite with [Pytest](https://pytest.org) (90 tests passing).
 - 🏭 CI/CD based on GitHub Actions.
 
 ---
@@ -97,9 +98,10 @@ All endpoints are authenticated using standard Bearer JWT tokens under `/api/v1/
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/v1/rag/documents` | Ingest a document (chunks text & generates vector embeddings) |
-| `GET` | `/api/v1/rag/documents` | List current user's indexed documents with chunk counts |
+| `POST` | `/api/v1/rag/documents` | Ingest document synchronously or in background (`?background=true`) |
+| `GET` | `/api/v1/rag/documents` | List current user's indexed documents with chunk counts & status |
 | `GET` | `/api/v1/rag/documents/{id}` | Retrieve document details (tenant-scoped) |
+| `GET` | `/api/v1/rag/documents/{id}/status` | Poll real-time background ingestion status (`processing`, `ready`, `failed`) |
 | `DELETE` | `/api/v1/rag/documents/{id}` | Delete document and cascade delete all associated chunks/vectors |
 | `POST` | `/api/v1/rag/search` | Execute hybrid search (Dense Vector + Full-Text Search with RRF) |
 | `POST` | `/api/v1/rag/query` | Complete RAG Q&A: retrieves context and generates grounded answer |
@@ -194,6 +196,22 @@ curl -X POST "http://localhost:8000/api/v1/chat/sessions/$SESSION_ID/messages" \
 
 ---
 
+## 🎨 Interactive Frontend UI (Knowledge Base & AI Chat)
+
+The React 19 frontend includes dedicated interfaces for AI workflows:
+
+* 📚 **Knowledge Base Dashboard (`/documents`)**:
+  - Ingest raw text or markdown documents with optional background task offloading (`BackgroundTasks`).
+  - Live polling: documents dynamically transition from `processing` to `ready` without page reloads.
+  - Real-time **Monthly AI Token & Cost Metering** progress bar displaying prompt/completion tokens and budget limits.
+* 💬 **Conversational AI Chat (`/chat`)**:
+  - Persistent multi-turn chat sessions with sidebar management (create, switch, delete).
+  - Real-time token streaming via Server-Sent Events (SSE).
+  - Grounded source citations accordion showing document chunk indices, match type, and similarity scores.
+  - "Stop Generating" client abort button linked to frontend `AbortController`.
+
+---
+
 ### Dashboard Login
 
 ![Dashboard login screenshot](img/login.png)
@@ -244,7 +262,7 @@ $ uv run pytest tests
 
 Output:
 ```console
-======================= 63 passed, 58 warnings in 5.91s =======================
+======================= 90 passed, 76 warnings in 7.64s =======================
 ```
 
 ---
